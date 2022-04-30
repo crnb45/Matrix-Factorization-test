@@ -2,6 +2,7 @@ import numpy
 import sys
 import pandas as pd
 import time
+import matplotlib.pyplot as plt
 
 # preprocess data
 data_train = pd.read_csv('u1.base', sep="\t")
@@ -11,13 +12,10 @@ data_train.columns = ['user_id', 'item_id', 'rating', 'timestamp']
 data_test.columns = ['user_id', 'item_id', 'rating', 'timestamp']
 
 # select few rows of data_train to reduce training time
-start_idx = 1000
-end_idx = 6000
-data_train = data_train.iloc[start_idx:end_idx]
-print("index range:", start_idx, "to", end_idx)
-# print("--- data_train ---")
-# print(data_train.head())
-# print("------------------\n")
+# start_idx = 1000
+# end_idx = 6000
+# data_train = data_train.iloc[start_idx:end_idx]
+# print("index range:", start_idx, "to", end_idx)
 
 def dataset2mat(data):
     user_max = data["user_id"].max()
@@ -44,8 +42,9 @@ uxp_test = 1
 
 def run_demo(train, test):
     model = ProductRecommender()
-    model.fit(train, learning_rate=0.001, steps=1000, regularization_penalty=0.02)
+    model.fit(train, learning_rate=0.001, regularization_penalty=0.0)
     #model.predict_instance(0)
+    model.draw_errplot()
 
 class ProductRecommender(object):
     """
@@ -87,8 +86,9 @@ class ProductRecommender(object):
     def __init__(self):
         self.Q = None
         self.P = None
+        self.train_err = []
 
-    def fit(self, user_x_product, latent_features_guess=2, learning_rate=0.0002, steps=5000, regularization_penalty=0.02, convergeance_threshold=0.001):
+    def fit(self, user_x_product, latent_features_guess=2, learning_rate=0.0002, steps=1000, regularization_penalty=0.02, convergeance_threshold=0.001):
         """
         Trains the predictor with the given parameters.
         :param user_x_product:
@@ -192,6 +192,7 @@ class ProductRecommender(object):
 
             # Measure error
             error = self.__error(R, P, Q, K, beta)
+            self.train_err.append(error)
 
             # Terminate when we converge
             if error < error_limit:
@@ -220,9 +221,11 @@ class ProductRecommender(object):
         :return:
         """
         e = 0
+        ratings_count = 0       # number of ratings
         for i in range(len(R)):
             for j in range(len(R[i])):
                 if R[i][j] > 0:
+                    ratings_count += 1
 
                     # loss function error sum( (y-y_hat)^2 )
                     e = e + pow(R[i][j]-numpy.dot(P[i,:],Q[:,j]), 2)
@@ -232,7 +235,7 @@ class ProductRecommender(object):
 
                         # error + ||P||^2 + ||Q||^2
                         e = e + (beta/2) * ( pow(P[i][k], 2) + pow(Q[k][j], 2) )
-        return e
+        return numpy.sqrt(e/ratings_count)
 
     def __print_fit_stats(self, error, samples_count, products_count):
         print('training complete...')
@@ -242,6 +245,13 @@ class ProductRecommender(object):
         print('Samples: ' + str(samples_count))
         print('Products: ' + str(products_count))
         print('------------------------------')
+
+    def draw_errplot(self, train = True):
+        if train:
+            plt.plot(self.train_err)
+            plt.ylabel('RMSE')
+            plt.xlabel('epochs')
+            plt.show()
 
 if __name__ == '__main__':
     run_demo(uxp_train, uxp_test)
