@@ -37,13 +37,13 @@ def dataset2mat(data):
         user_x_product[user_id][item_id] = rating
     return user_x_product
 
-uxp = dataset2mat(data_train)
-numpy_uxp = numpy.array(uxp)
-print(numpy_uxp[0::2][0:10])
+uxp_train = dataset2mat(data_train)
+print("uxp_train size: (", len(uxp_train), ",", len(uxp_train[0]), ")")
+uxp_test = dataset2mat(data_test)
 
-def run_demo(train):
+def run_demo(train, test):
     model = ProductRecommender()
-    model.fit(train, learning_rate=0.0002, steps=500, regularization_penalty=0.1)
+    model.fit(train, learning_rate=0.0002, steps=5000, regularization_penalty=0.1)
     model.predict_instance(0)
 
 class ProductRecommender(object):
@@ -175,9 +175,10 @@ class ProductRecommender(object):
                             Q[k][j] = Q[k][j] + alpha * ( 2 * eij * P[i][k] - beta * Q[k][j] )
                             
                             # for debugging
-                            print("P[i][k]=", P[i][k], "\tQ[k][j]=", Q[k][j])
+                            #print("P[i][k]=", P[i][k], "\tQ[k][j]=", Q[k][j])
                             if (numpy.isnan(P[i][k]) or numpy.isnan(Q[k][j])):
                                 isbreak = True
+                                print("break by NaN")
                                 break
                     if (isbreak): break
                 if (isbreak): break  
@@ -233,5 +234,5 @@ class ProductRecommender(object):
         print('------------------------------')
 
 if __name__ == '__main__':
-    run_demo(data_train)
+    run_demo(uxp_train, uxp_test)
     
