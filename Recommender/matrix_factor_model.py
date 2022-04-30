@@ -1,6 +1,7 @@
 import numpy
 import sys
 import pandas as pd
+import time
 
 # preprocess data
 data_train = pd.read_csv('u1.base', sep="\t")
@@ -9,15 +10,14 @@ data_test = pd.read_csv('u1.test', sep="\t")
 data_train.columns = ['user_id', 'item_id', 'rating', 'timestamp']
 data_test.columns = ['user_id', 'item_id', 'rating', 'timestamp']
 
-print("--- data_train ---")
-print(data_train.head())
-print("------------------\n")
-
-# select few rows of data_train to avoid overflow
-data_train = data_train.iloc[3000:3100]
-print("--- data_train ---")
-print(data_train.head())
-print("------------------\n")
+# select few rows of data_train to reduce training time
+start_idx = 1000
+end_idx = 6000
+data_train = data_train.iloc[start_idx:end_idx]
+print("index range:", start_idx, "to", end_idx)
+# print("--- data_train ---")
+# print(data_train.head())
+# print("------------------\n")
 
 def dataset2mat(data):
     user_max = data["user_id"].max()
@@ -39,12 +39,13 @@ def dataset2mat(data):
 
 uxp_train = dataset2mat(data_train)
 print("uxp_train size: (", len(uxp_train), ",", len(uxp_train[0]), ")")
-uxp_test = dataset2mat(data_test)
+#uxp_test = dataset2mat(data_test)
+uxp_test = 1
 
 def run_demo(train, test):
     model = ProductRecommender()
-    model.fit(train, learning_rate=0.0002, steps=5000, regularization_penalty=0.1)
-    model.predict_instance(0)
+    model.fit(train, learning_rate=0.001, steps=1000, regularization_penalty=0.02)
+    #model.predict_instance(0)
 
 class ProductRecommender(object):
     """
@@ -98,6 +99,10 @@ class ProductRecommender(object):
         :param convergeance_threshold:
         :return:
         """
+        print("--- model parameter ---")
+        print("learning rate=", learning_rate)
+        print("epoch=", steps)
+        print("lambda=", regularization_penalty)
         print('training model...')
         return self.__factor_matrix(user_x_product, latent_features_guess, learning_rate, steps, regularization_penalty, convergeance_threshold)
 
@@ -139,6 +144,7 @@ class ProductRecommender(object):
         """
         # for debugging
         isbreak = False
+        start_time = time.time()
 
         # Transform regular array to numpy array
         R = numpy.array(R)
@@ -196,6 +202,10 @@ class ProductRecommender(object):
         # P = Users x feature strength
         self.Q = Q.T
         self.P = P
+
+        end_time = time.time()
+        elapsed_time = int(end_time - start_time)
+        print("elapsed time:", elapsed_time//60, "min", elapsed_time%60, "sec")
 
         self.__print_fit_stats(error, N, M)
 
