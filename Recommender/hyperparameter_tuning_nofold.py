@@ -3,68 +3,22 @@ import sys
 import pandas as pd
 import time
 import matplotlib.pyplot as plt
-from datetime import datetime
 
 # preprocess data
-data_train = pd.read_csv('u1.base', sep="\t")
-data_train.columns = ['user_id', 'item_id', 'rating', 'timestamp']
-data_train.sample(frac = 1)         # shuffle rows
+data_train = open("mat_fact_train.csv")
+data_val = open("mat_fact_val.csv")
+uxp_train = numpy.loadtxt(data_train, delimiter=",")
+uxp_val = numpy.loadtxt(data_val, delimiter=",")
 
-fold = 5
-row_count = len(data_train.index)
-fold_count = row_count // fold
-
-divided_data_train = []
-for i in range(fold):
-    if i != fold-1:
-        divided_data_train.append(data_train.iloc[i*fold:(i+1)*fold])
-    else:
-        divided_data_train.append(data_train.iloc[i*fold:])
-
-train_and_val = []
-for i in range(fold):
-    base = [j for j in range(fold)]
-    base.remove(i)
-    fold_train = divided_data_train[base[0]]
-    for k in range(1, len(base)):
-        fold_train = pd.concat([fold_train, divided_data_train[base[k]]], ignore_index=True)
-    fold_val = divided_data_train[i]
-    train_and_val.append([fold_train, fold_val])
-
-def dataset2mat(data):
-    user_num = 943
-    item_num = 1682
-
-    user_x_product = [ [0]*(item_num) for _ in range(user_num) ]
-
-    for index, row in data.iterrows():
-        user_id = row['user_id'] - 1
-        item_id = row['item_id'] - 1
-        rating = row['rating']
-        user_x_product[user_id][item_id] = rating
-    return user_x_product
-
-uxp_train_and_val = []
-for i in range(fold):
-    uxp_train = dataset2mat(train_and_val[i][0])
-    uxp_val = dataset2mat(train_and_val[i][1])
-    uxp_train_and_val.append([uxp_train, uxp_val])
-
-def run_demo(uxp_train_and_val, reg_pen):
+def run_demo(reg_pen):
     model = ProductRecommender()
-    total_t_e = 0
-    total_v_e = 0
-    for i in range(fold):
-        t_e, v_e = model.fit(uxp_train_and_val[i][0], uxp_train_and_val[i][1], learning_rate=0.001, steps = 200, regularization_penalty=reg_pen)
-        total_t_e += t_e
-        total_v_e += v_e
-    mean_t_e = total_t_e / fold
-    mean_v_e = total_v_e / fold
-    
+    t_e, v_e = model.fit(uxp_train, uxp_val, learning_rate=0.001, steps = 200, regularization_penalty=reg_pen)
+
+    curr_time = int(time.time())
+    print("curr time=", curr_time)
     print("lambda=", reg_pen)
-    print("training error=", mean_t_e)
-    print("validation error=", mean_v_e)
-    return [reg_pen, mean_t_e, mean_v_e]
+    print("training error=", t_e)
+    print("validation error=", v_e)
 
 
 class ProductRecommender(object):
@@ -120,10 +74,6 @@ class ProductRecommender(object):
         :param convergeance_threshold:
         :return:
         """
-        now = datetime.now()
-        current_time = now.strftime("%H:%M:%S")
-        print("Current Time :", current_time)
-
         print("--- model parameter ---")
         print("learning rate=", learning_rate)
         print("epoch=", steps)
@@ -235,7 +185,7 @@ class ProductRecommender(object):
         t_error = self.__error(R, P, Q, K, beta)
         v_error = self.__error(val_R, P, Q, K, beta)
         self.__print_fit_stats(t_error, N, M)
-        print("validation error:", v_error)
+        print("v_error=", v_error)
         return t_error, v_error
 
     def __error(self, R, P, Q, K, beta):
@@ -284,8 +234,4 @@ class ProductRecommender(object):
             plt.show()
 
 if __name__ == '__main__':
-    result = []
-    lambda_list = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2]
-    for l in lambda_list:
-        result.append(run_demo(uxp_train_and_val, l))
-    numpy.savetxt("hyperparameter_tuning_kfold.csv", result, delimiter=",")
+    run_demo(0.05)
