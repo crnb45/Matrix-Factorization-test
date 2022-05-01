@@ -5,17 +5,10 @@ import time
 import matplotlib.pyplot as plt
 
 # preprocess data
-data_train = pd.read_csv('u1.base', sep="\t")
-data_test = pd.read_csv('u1.test', sep="\t")
-
-data_train.columns = ['user_id', 'item_id', 'rating', 'timestamp']
-data_test.columns = ['user_id', 'item_id', 'rating', 'timestamp']
-
-# select few rows of data_train to reduce training time
-# start_idx = 1000
-# end_idx = 6000
-# data_train = data_train.iloc[start_idx:end_idx]
-# print("index range:", start_idx, "to", end_idx)
+data_train = open("mat_fact_train.csv")
+data_val = open("mat_fact_val.csv")
+uxp_train = numpy.loadtxt(data_train, delimiter=",")
+uxp_val = numpy.loadtxt(data_val, delimiter=",")
 
 def dataset2mat(data):
     user_max = data["user_id"].max()
@@ -35,16 +28,26 @@ def dataset2mat(data):
         user_x_product[user_id][item_id] = rating
     return user_x_product
 
-uxp_train = dataset2mat(data_train)
-print("uxp_train size: (", len(uxp_train), ",", len(uxp_train[0]), ")")
-#uxp_test = dataset2mat(data_test)
-uxp_test = 1
+data_test = pd.read_csv('u1.test', sep="\t")
+data_test.columns = ['user_id', 'item_id', 'rating', 'timestamp']
+uxp_test = dataset2mat(data_test)
 
-def run_demo(train, test):
+print("uxp_train size: (", len(uxp_train), ",", len(uxp_train[0]), ")")
+
+def run_demo(train, val, test):
     model = ProductRecommender()
-    model.fit(train, learning_rate=0.001, regularization_penalty=0.0)
-    #model.predict_instance(0)
-    model.draw_errplot()
+    model.fit(train, val, learning_rate=0.001, regularization_penalty=0.0)
+
+    p, q = model.get_models()
+    curr_time = int(time.time())
+    numpy.savetxt("p_"+str(curr_time)+".csv", p, delimiter=",")
+    numpy.savetxt("q_"+str(curr_time)+".csv", q, delimiter=",")
+    numpy.savetxt("train_err_"+str(curr_time)+".csv", model.train_err, delimiter=",")
+    numpy.savetxt("val_err_"+str(curr_time)+".csv", model.val_err, delimiter=",")
+    print("curr time=", curr_time)
+    print("saved model and error")
+
+    model.draw_train_val_errplot()
 
 class ProductRecommender(object):
     """
@@ -87,11 +90,14 @@ class ProductRecommender(object):
         self.Q = None
         self.P = None
         self.train_err = []
+        self.val_err = []
+        self.test_err = []
 
-    def fit(self, user_x_product, latent_features_guess=2, learning_rate=0.0002, steps=1000, regularization_penalty=0.02, convergeance_threshold=0.001):
+    def fit(self, user_x_product, val_uxp, latent_features_guess=2, learning_rate=0.0002, steps=1000, regularization_penalty=0.02, convergeance_threshold=0.001):
         """
         Trains the predictor with the given parameters.
         :param user_x_product:
+        :param val_uxp:
         :param latent_features_guess:
         :param learning_rate:
         :param steps:
@@ -104,7 +110,7 @@ class ProductRecommender(object):
         print("epoch=", steps)
         print("lambda=", regularization_penalty)
         print('training model...')
-        return self.__factor_matrix(user_x_product, latent_features_guess, learning_rate, steps, regularization_penalty, convergeance_threshold)
+        return self.__factor_matrix(user_x_product, val_uxp, latent_features_guess, learning_rate, steps, regularization_penalty, convergeance_threshold)
 
     def predict_instance(self, row_index):
         """
@@ -128,9 +134,10 @@ class ProductRecommender(object):
         """
         return self.P, self.Q
 
-    def __factor_matrix(self, R, K, alpha, steps, beta, error_limit):
+    def __factor_matrix(self, R, val_R, K, alpha, steps, beta, error_limit):
         """
         R = user x product matrix
+        val_R = user x product matrix for validation
         K = latent features count (how many features we think the model should derive)
         alpha = learning rate
         beta = regularization penalty (minimize over/under fitting)
@@ -148,6 +155,7 @@ class ProductRecommender(object):
 
         # Transform regular array to numpy array
         R = numpy.array(R)
+        val_R = numpy.array(val_R)
 
         # Generate P - N x K
         # Use random values to start. Best performance
@@ -160,7 +168,8 @@ class ProductRecommender(object):
         Q = numpy.random.rand(M, K)
         Q = Q.T
 
-        error = 0
+        t_error = 0
+        v_error = 0
 
         # iterate through max # of steps
         for step in range(steps):
@@ -191,11 +200,13 @@ class ProductRecommender(object):
             if (isbreak): break        
 
             # Measure error
-            error = self.__error(R, P, Q, K, beta)
-            self.train_err.append(error)
+            t_error = self.__error(R, P, Q, K, beta)
+            self.train_err.append(t_error)
+            v_error = self.__error(val_R, P, Q, K, beta)
+            self.val_err.append(v_error)
 
             # Terminate when we converge
-            if error < error_limit:
+            if t_error < error_limit:
                 break
 
         # track Q, P (learned params)
@@ -208,7 +219,7 @@ class ProductRecommender(object):
         elapsed_time = int(end_time - start_time)
         print("elapsed time:", elapsed_time//60, "min", elapsed_time%60, "sec")
 
-        self.__print_fit_stats(error, N, M)
+        self.__print_fit_stats(t_error, N, M)
 
     def __error(self, R, P, Q, K, beta):
         """
@@ -246,13 +257,15 @@ class ProductRecommender(object):
         print('Products: ' + str(products_count))
         print('------------------------------')
 
-    def draw_errplot(self, train = True):
+    def draw_train_val_errplot(self, train = True):
         if train:
             plt.plot(self.train_err)
+            plt.plot(self.val_err)
+            plt.legend(['train err', 'val err'])
             plt.ylabel('RMSE')
             plt.xlabel('epochs')
             plt.show()
 
 if __name__ == '__main__':
-    run_demo(uxp_train, uxp_test)
+    run_demo(uxp_train, uxp_val, uxp_test)
     
